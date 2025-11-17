@@ -3,9 +3,9 @@ import { updateUserRequest } from "../controller/userRequest.controller";
 import { upload } from "../config/multer";
 
 
-const userRequest = Router()
+const userRouter = Router()
 
 
-userRequest.post("/request",upload.single("image"),updateUserRequest)
+userRouter.post("/request",upload.single("image"),updateUserRequest)
 
-export default userRequest;
+export default userRouter;

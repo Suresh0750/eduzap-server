@@ -2,6 +2,8 @@ import { IRequest } from "../utils/types";
 import UserRequest from "../model/requests.schema";
 import logger from "../utils/logger";
 import { NextFunction, Request, Response } from 'express';
+import { uploadImage } from "../utils/helper";
+import { HttpStatus } from "../utils/types";
 
 
 
@@ -10,17 +12,20 @@ export const updateUserRequest = async (req:Request,res:Response,next:NextFuncti
 
         const { name, phone, title } = req.body 
 
-        if(req.file){
-            
+        let imageUrl = undefined;
+
+        if (req.file) {
+            imageUrl = await uploadImage(req.file);
         }
 
         const newRequest: IRequest = {
-          name: name?.trim(),
-          phone: phone?.trim(),
-          title: title?.trim(),
-        //   image: uploadedImageUrl,
-          timestamp: new Date().toISOString(),
-        };
+            name: name?.trim(),
+            phone: phone?.trim(),
+            title: title?.trim(),
+            ...(imageUrl ? { image: imageUrl } : {}),
+            timestamp: new Date().toISOString(),
+          };
+           
     
         logger.info(`Received new request submission`, newRequest);
     
@@ -29,7 +34,7 @@ export const updateUserRequest = async (req:Request,res:Response,next:NextFuncti
     
         logger.info(`Data successfully stored`, savedData);
     
-        return 
+        return res.status(HttpStatus.CREATED).send({success :true, data: savedData})
 
     }catch(err){
         logger.error(`Error from update request ${err}`)
