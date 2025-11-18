@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserRequest, updateUserRequest } from "../controller/userRequest.controller";
+import { deleteUserRequest, getUserRequest, updateUserRequest } from "../controller/userRequest.controller";
 import { upload } from "../config/multer";
 
 
@@ -10,6 +10,8 @@ userRouter
   .route("/")
   .post(upload.single("image"), updateUserRequest)
   .get(getUserRequest);
+
+userRouter.delete("/:requestId",deleteUserRequest)
 
 
 export default userRouter;
