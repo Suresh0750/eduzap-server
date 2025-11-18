@@ -4,6 +4,7 @@ import connectToDatabase from "./config/database"
 import logger from "./utils/logger";
 import userRouter from "./router/user.router"
 import { errorHandler } from "./middleware/errorHandler";
+import cors from 'cors'
 
 dotenv.config();
 
@@ -13,7 +14,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-app.use("/request",userRouter)
+app.use(cors()); 
+
+app.use("/requests",userRouter)
+
 
 // * global error handler
 app.use(errorHandler)

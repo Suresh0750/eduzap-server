@@ -1,11 +1,15 @@
 import { Router } from "express";
-import { updateUserRequest } from "../controller/userRequest.controller";
+import { getUserRequest, updateUserRequest } from "../controller/userRequest.controller";
 import { upload } from "../config/multer";
 
 
 const userRouter = Router()
 
 
-userRouter.post("/request",upload.single("image"),updateUserRequest)
+userRouter
+  .route("/")
+  .post(upload.single("image"), updateUserRequest)
+  .get(getUserRequest);
+
 
 export default userRouter;
