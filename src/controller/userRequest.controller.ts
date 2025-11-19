@@ -4,13 +4,37 @@ import logger from "../utils/logger";
 import { NextFunction, Request, Response } from 'express';
 import { uploadImage } from "../utils/helper";
 import { HttpStatus } from "../utils/types";
+import { userRequestSchema } from "../utils/validate";
+import { ApiError } from "../middleware/errorHandler";
 
 
 
 export const updateUserRequest = async (req:Request,res:Response,next:NextFunction)=>{
     try{
 
-        const { name, phone, title, image } = req.body 
+        const { name, phone, title, image } = req.body
+
+      
+        const validationResult = userRequestSchema.safeParse({
+            name,
+            phone,
+            title,
+        });
+
+        if (!validationResult.success) {
+            const errorMessages = validationResult.error.issues
+                .map((err) => `${err.path.join('.')}: ${err.message}`)
+                .join(', ');
+            
+            logger.warn(`Validation failed for updateUserRequest: ${errorMessages}`);
+            throw new ApiError(
+                HttpStatus.BAD_REQUEST,
+                `Validation error: ${errorMessages}`,
+                "VALIDATION_ERROR"
+            );
+        }
+
+        const validatedData = validationResult.data;
 
         try{
             logger.info(`payload data's ${JSON.stringify(req.body)} file : ${req.file}`)
@@ -27,9 +51,9 @@ export const updateUserRequest = async (req:Request,res:Response,next:NextFuncti
         }
 
         const newRequest: IRequest = {
-            name: name?.trim(),
-            phone: phone?.trim(),
-            title: title?.trim(),
+            name: validatedData.name,
+            phone: validatedData.phone,
+            title: validatedData.title,
             ...(imageUrl ? { image: imageUrl } : {}),
             timestamp: new Date().toISOString(),
           };
