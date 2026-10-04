@@ -1,4 +1,4 @@
-FROM node:20
+FROM node:20 AS builder
 
 WORKDIR app/
 
@@ -10,6 +10,16 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 3000
+#----PRODUCTION-----for small size image
 
-CMD ["npm","start"]
+FROM node:20-alpine
+
+WORKDIR app/
+
+COPY package*.json ./
+
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
+CMD ["node", "dist/server.js"]
