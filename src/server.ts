@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application ,Response,Request} from "express";
 import dotenv from "dotenv";
 import connectToDatabase from "./config/database"
 import logger from "./utils/logger";
@@ -17,6 +17,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors()); 
 
 app.use("/requests",userRouter)
+app.use("/health",(req:Request,res:Response)=>{
+  res.status(200).send("Message from eduzap server")
+})
 
 
 // * global error handler

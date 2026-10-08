@@ -1,0 +1,37 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eduzap-server
+  labels:
+    app: eduzap-server
+
+spec:
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: eduzap-server
+
+  template:
+    metadata:
+      labels:
+        app: eduzap-server
+
+    spec:
+      containers:
+        - name: eduzap-server
+          image: suresh0750/eduzap-server:1.1
+
+          ports:
+            - containerPort: 3000
+
+          envFrom:
+            - configMapRef:
+                name: eduzap-server-config
+
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: eduzap-secret
+                  key: MONGO_URL
