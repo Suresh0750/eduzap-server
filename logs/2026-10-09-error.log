@@ -1,1 +1,2 @@
 2026-10-09 11:47:13 [error]: Error from connect database :MongooseServerSelectionError: getaddrinfo ENOTFOUND mongodb
+2026-10-09 11:51:46 [error]: Error from connect database :MongooseServerSelectionError: getaddrinfo ENOTFOUND mongodb
