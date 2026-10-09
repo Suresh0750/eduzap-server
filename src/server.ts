@@ -17,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors()); 
 
 app.use("/api/requests",userRouter)
-app.use("/health",(req:Request,res:Response)=>{
+app.use("/api/health",(req:Request,res:Response)=>{
   res.status(200).send("Message from eduzap server")
 })
 
