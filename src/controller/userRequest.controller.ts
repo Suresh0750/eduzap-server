@@ -2,7 +2,7 @@ import { IRequest } from "../utils/types";
 import UserRequest from "../model/requests.schema";
 import logger from "../utils/logger";
 import { NextFunction, Request, Response } from 'express';
-import { uploadImage } from "../utils/helper";
+import { getImageS3Url, uploadImage, uploadImageS3 } from "../utils/helper";
 import { HttpStatus } from "../utils/types";
 import { userRequestSchema } from "../utils/validate";
 import { ApiError } from "../middleware/errorHandler";
@@ -46,7 +46,7 @@ export const updateUserRequest = async (req:Request,res:Response,next:NextFuncti
 
         if (req.file) {
             logger.info(`Log the file :${JSON.stringify(req.file)}`)
-            imageUrl = await uploadImage(req.file);
+            imageUrl = await uploadImageS3(req.file);
             logger.info(`Image has been uploaded to cloudinary from multer & URL : ${imageUrl}`)
         }
 
@@ -119,7 +119,10 @@ export const getUserRequest = async (
 
       return res.status(HttpStatus.OK).send({
         success: true,
-        data: requests,
+        data: await Promise.all(requests.map(async (request) => ({
+          ...request.toObject(),
+          image: request.image&&!request.image?.includes("cloudinary")  ? await getImageS3Url(request.image) : request?.image,
+        }))),
         meta: {
           totalCount,
           page,
