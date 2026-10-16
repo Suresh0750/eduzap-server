@@ -21,14 +21,14 @@ const logger = createLogger({
       filename: "logs/%DATE%-app.log",
       datePattern: "YYYY-MM-DD",
       maxSize: "20m",
-      maxFiles: "14d",
+      maxFiles: "1d",
     }),
     new DailyRotateFile({
       level: "error",
       filename: "logs/%DATE%-error.log",
       datePattern: "YYYY-MM-DD",
       maxSize: "20m",
-      maxFiles: "30d",
+      maxFiles: "1d",
     }),
   ],
 });
