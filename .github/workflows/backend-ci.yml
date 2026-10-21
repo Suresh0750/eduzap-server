@@ -32,3 +32,11 @@ jobs:
 
       - name: Build TypeScript
         run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eduzap-backend-build
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
