@@ -1,5 +1,5 @@
 
-name: Eduzap Backend CI
+name: Eduzap Backend CI/CD
 
 on:
   push:
@@ -11,6 +11,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: eduzap-production-deploy
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -33,6 +37,10 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Verify build output
+        run: |
+          test -f dist/server.js
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -40,3 +48,166 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 1
+
+  deploy:
+    name: Deploy to AWS EC2
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: eduzap-backend-build
+          path: dist
+
+      - name: Configure SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          set -eu
+
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$EC2_SSH_KEY"
+          test -n "$EC2_KNOWN_HOSTS"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/eduzap_deploy
+          chmod 600 ~/.ssh/eduzap_deploy
+
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/eduzap_deploy \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "echo SSH connection successful"
+
+      - name: Upload build to staging directory
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -eu
+
+          RELEASE_DIR="/home/ubuntu/eduzap-server/releases/${GITHUB_SHA}"
+
+          ssh -i ~/.ssh/eduzap_deploy \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "mkdir -p '$RELEASE_DIR'"
+
+          scp -i ~/.ssh/eduzap_deploy \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -r dist/. \
+            "$EC2_USER@$EC2_HOST:$RELEASE_DIR/"
+
+      - name: Activate build with rollback protection
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -eu
+
+          ssh -i ~/.ssh/eduzap_deploy \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "GITHUB_SHA='$GITHUB_SHA' GITHUB_RUN_ID='$GITHUB_RUN_ID' bash -s" <<'REMOTE'
+          set -eu
+
+          APP_DIR="/home/ubuntu/eduzap-server"
+          RELEASE_DIR="$APP_DIR/releases/$GITHUB_SHA"
+          NEW_DIR="$APP_DIR/dist-new-$GITHUB_RUN_ID"
+          BACKUP_DIR="$APP_DIR/releases/rollback-$GITHUB_RUN_ID"
+
+          # Check prerequisites before changing production.
+          test -f "$RELEASE_DIR/server.js"
+          test -d "$APP_DIR/dist"
+          test ! -e "$NEW_DIR"
+          test ! -e "$BACKUP_DIR"
+
+          # Prepare the complete new build separately.
+          mkdir "$NEW_DIR"
+
+          if ! cp -a "$RELEASE_DIR/." "$NEW_DIR/"; then
+            rm -rf "$NEW_DIR"
+            exit 1
+          fi
+
+          test -f "$NEW_DIR/server.js"
+
+          rollback() {
+            echo "Deployment failed. Attempting rollback..."
+
+            if [ -d "$BACKUP_DIR" ]; then
+              rm -rf "$APP_DIR/dist"
+
+              if mv "$BACKUP_DIR" "$APP_DIR/dist"; then
+                pm2 restart eduzap-api
+              else
+                echo "CRITICAL: Could not restore the previous build."
+                return 1
+              fi
+            else
+              echo "CRITICAL: Backup directory not found."
+              return 1
+            fi
+          }
+
+          # Preserve the current build.
+          if ! mv "$APP_DIR/dist" "$BACKUP_DIR"; then
+            rm -rf "$NEW_DIR"
+            exit 1
+          fi
+
+          # Activate the new build.
+          if ! mv "$NEW_DIR" "$APP_DIR/dist"; then
+            rollback || true
+            exit 1
+          fi
+
+          # Restart the existing PM2 process.
+          if ! pm2 restart eduzap-api; then
+            rollback || true
+            exit 1
+          fi
+
+          # Allow up to 20 seconds for the API to become healthy.
+          HEALTHY=false
+
+          for attempt in $(seq 1 10); do
+            if curl --fail --silent \
+              http://localhost:3001/api/health; then
+              HEALTHY=true
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [ "$HEALTHY" = true ]; then
+            echo "Deployment successful."
+          else
+            echo "Health check failed."
+            rollback || true
+            exit 1
+          fi
+          REMOTE
+
+      - name: Remove SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/eduzap_deploy
